@@ -31,8 +31,7 @@ class User extends ActiveRecord  implements IdentityInterface
             ['user_name', 'string', 'min' => 4, 'max' => 12],
             ['password_hash', 'string', 'min' => 6, 'max' => 14],
             ['email', 'email'],
-            ['email', 'unique', 'message' => 'Этот адрес почты уже используется'],
-            ['user_name', 'unique', 'message' => 'Это имя уже используется'],
+            [['email', 'user_name'], 'unique'],
             ['confirmPassword', 'comparePasswords'],
 //            ['confirmPassword', 'compare',
 //              'compareValue' => 'password_hash', 'message' => 'Пароли не совпадают']
