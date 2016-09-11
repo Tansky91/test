@@ -2,38 +2,63 @@
 
 namespace app\models;
 
-class User extends \yii\base\Object implements \yii\web\IdentityInterface
+use yii\base\NotSupportedException;
+use Yii;
+use yii\db\ActiveRecord;
+use yii\web\IdentityInterface;
+
+/**
+ * @property integer $id_user
+ * @property string $user_name
+ * @property string $password_hash
+ * @property string $email
+ */
+
+class User extends ActiveRecord  implements IdentityInterface
 {
-    public $id;
-    public $username;
-    public $password;
-    public $authKey;
-    public $accessToken;
+    public $confirmPassword;
 
-    private static $users = [
-        '100' => [
-            'id' => '100',
-            'username' => 'admin',
-            'password' => 'admin',
-            'authKey' => 'test100key',
-            'accessToken' => '100-token',
-        ],
-        '101' => [
-            'id' => '101',
-            'username' => 'demo',
-            'password' => 'demo',
-            'authKey' => 'test101key',
-            'accessToken' => '101-token',
-        ],
-    ];
+    public static function tableName()
+    {
+        return 'Users';
+    }
 
+    public function rules()
+    {
+        return [
+            [['user_name', 'email', 'password_hash', 'confirmPassword'], 'required'],
+            [['user_name', 'password_hash', 'email', 'confirmPassword'], 'trim'],
+            ['user_name', 'string', 'min' => 4, 'max' => 12],
+            ['password_hash', 'string', 'min' => 6, 'max' => 14],
+            ['email', 'email'],
+            ['email', 'unique', 'message' => 'Этот адрес почты уже используется'],
+            ['user_name', 'unique', 'message' => 'Это имя уже используется'],
+            ['confirmPassword', 'comparePasswords'],
+//            ['confirmPassword', 'compare',
+//              'compareValue' => 'password_hash', 'message' => 'Пароли не совпадают']
+//              @todo Разобраться, почему не хочет работать валидатор
+        ];
+    }
+
+    public function attributeLabels()
+    {
+        return [
+            'user_name' => 'Имя пользователя',
+            'password_hash' => 'Пароль',
+            'email' => 'Почта',
+            'confirmPassword' => 'Подтверждение пароля'
+        ];
+    }
 
     /**
      * @inheritdoc
      */
     public static function findIdentity($id)
     {
-        return isset(self::$users[$id]) ? new static(self::$users[$id]) : null;
+        if (is_numeric($id)) {
+            return static::findOne($id);
+        }
+        return static::findByUsername($id);
     }
 
     /**
@@ -41,13 +66,7 @@ class User extends \yii\base\Object implements \yii\web\IdentityInterface
      */
     public static function findIdentityByAccessToken($token, $type = null)
     {
-        foreach (self::$users as $user) {
-            if ($user['accessToken'] === $token) {
-                return new static($user);
-            }
-        }
-
-        return null;
+        throw new NotSupportedException('"findIdentityByAccessToken" is not implemented.');
     }
 
     /**
@@ -58,13 +77,7 @@ class User extends \yii\base\Object implements \yii\web\IdentityInterface
      */
     public static function findByUsername($username)
     {
-        foreach (self::$users as $user) {
-            if (strcasecmp($user['username'], $username) === 0) {
-                return new static($user);
-            }
-        }
-
-        return null;
+        return static::findOne(['user_name' => $username]);
     }
 
     /**
@@ -72,7 +85,7 @@ class User extends \yii\base\Object implements \yii\web\IdentityInterface
      */
     public function getId()
     {
-        return $this->id;
+        return $this->getPrimaryKey();
     }
 
     /**
@@ -80,7 +93,7 @@ class User extends \yii\base\Object implements \yii\web\IdentityInterface
      */
     public function getAuthKey()
     {
-        return $this->authKey;
+        return null;
     }
 
     /**
@@ -88,7 +101,7 @@ class User extends \yii\base\Object implements \yii\web\IdentityInterface
      */
     public function validateAuthKey($authKey)
     {
-        return $this->authKey === $authKey;
+        return true;
     }
 
     /**
@@ -99,6 +112,24 @@ class User extends \yii\base\Object implements \yii\web\IdentityInterface
      */
     public function validatePassword($password)
     {
-        return $this->password === $password;
+        return Yii::$app->getSecurity()->validatePassword($password, $this->password_hash);
+    }
+
+    public function beforeSave($insert)
+    {
+        if (parent::beforeSave($insert)) {
+            $this->password_hash = Yii::$app->getSecurity()->generatePasswordHash($this->password_hash);
+            return true;
+        }
+        return false;
+    }
+
+    public function comparePasswords($attribute, $params)
+    {
+        if ($this->password_hash != $this->confirmPassword) {
+            $this->addError($attribute, 'Пароли не совпадают');
+            return false;
+        }
+        return true;
     }
 }
